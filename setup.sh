@@ -1,5 +1,6 @@
+#!/usr/bin/bash
 python -m venv ./env
-.\env\Scripts\activate
+source ./env/bin/activate
 python -m pip install --upgrade pip
 python -m pip install wheel
 python -m pip install numpy
