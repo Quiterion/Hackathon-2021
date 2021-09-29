@@ -28,8 +28,9 @@ class User:
             "bravo_axis_f": math.pi * 0.9,
             "bravo_axis_g": math.pi
         }
-        self.inc = -0.1
+        self.inc = 0.1
         self.last_time = time.time()
+        self.random_flag = True
         # Global state of the progress of the arm during the catching sequence
         # (No tags found, one tag found, both tags found)
         self.state = STATES.NONE
@@ -109,8 +110,8 @@ class User:
         if len(tag_centers) == 0 and self.state != STATES.TWO and self.state != STATES.SEARCHING:
             self.state = STATES.NONE
 
-        if len(tag_centers) == 1 and self.state != STATES.TWO:
-            self.state = STATES.ONE
+        #if len(tag_centers) == 1 and self.state != STATES.TWO:
+        #    self.state = STATES.ONE
 
         if len(tag_centers) == 2:
             self.state = STATES.TWO
@@ -118,59 +119,62 @@ class User:
 
         if self.state == STATES.NONE:
             # If no tags are visible, go to a default position
-            self.pose = calcIK(np.array([0.8, 0, 1.6]), np.array([1, 0, -1, 0]))
+            self.pose = calcIK(np.array([3, 0, 1.6]), np.array([1, 0, -1, 0]))
 
         if self.state == STATES.SEARCHING:
             # Go searching for new tags
-            if self.pose['bravo_axis_g'] > 1.5 * math.pi :
-                self.inc = -0.1
-            if self.pose['bravo_axis_g'] < -0.5 * math.pi:
-                self.inc = 0.1
-            self.pose["bravo_axis_g"] += self.inc
+            if self.pose['bravo_axis_e'] > 1 * math.pi :
+                self.inc = -0.2
+            if self.pose['bravo_axis_e'] < 0 * math.pi:
+                self.inc = 0.2
+            self.pose["bravo_axis_e"] += self.inc
+            self.pose["bravo_axis_f"] -= self.inc
             logging.debug(f"G AXIS VALUE: {self.pose['bravo_axis_g']}")
 
 
-        if self.state == STATES.ONE:
-            # Zoom out if centered
-            tagX, tagY = tag_centers[0]
-            if (tagX > 300 and tagX < 340) and (tagY > 220 and tagY < 260):
-                current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.1)
-                self.pose = calcIK(current_pos, current_quat)
-            else:
-                # Center the April Tag
-                if tagX < 310:
-                    self.pose["bravo_axis_e"] -= 0.1
-                if tagX > 330:
-                    self.pose["bravo_axis_e"] += 0.1
-                if tagY < 230:
-                    self.pose["bravo_axis_g"] -=  0.1
-                if tagY > 250:
-                    self.pose["bravo_axis_g"] += 0.1
+        #if self.state == STATES.ONE:
+        #    # Zoom out if centered
+        #    tagX, tagY = tag_centers[0]
+        #    if (tagX > 300 and tagX < 340) and (tagY > 220 and tagY < 260):
+        #        current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.1)
+        #        self.pose = calcIK(current_pos, current_quat)
+        #    else:
+        #        # Center the April Tag
+        #        if tagX < 310:
+        #            self.pose["bravo_axis_e"] -= 0.1
+        #        if tagX > 330:
+        #            self.pose["bravo_axis_e"] += 0.1
+        #        if tagY < 230:
+        #            self.pose["bravo_axis_g"] -=  0.1
+        #        if tagY > 250:
+        #            self.pose["bravo_axis_g"] += 0.1
 
 
 
         if self.state == STATES.TWO:
-            # Zoom in if centered
-            # TODO: improve centering technique
             cv2.circle(image, (self.handleX, self.handleY), 5, (255, 0, 0), 8)
-            if (self.handleX > 310 and self.handleX < 330) and (self.handleY > 190 and self.handleY < 210):
-                if current_pos[2] > 0:
-                    current_pos = (current_pos[0], current_pos[1], current_pos[2] - 0.1)
-                    self.pose = calcIK(current_pos, current_quat)
-            else:
+            if current_pos[2] >= 0:
+                current_pos = (current_pos[0], current_pos[1], current_pos[2] - 0.1)
+                self.pose = calcIK(current_pos, current_quat)
+            if current_pos[2] < 0 and self.random_flag:
+                current_pos = (current_pos[0], current_pos[1], current_pos[2])
+                self.pose = calcIK(current_pos, current_quat)
+                self.random_flag = False
+            if len(tag_centers) == 2:
+                # Get handle bar coordinates when both tags are visible
+                self.handleX, self.handleY = (int((tag_centers[0][0] + tag_centers[1][0]) / 2), int((tag_centers[0][1] + tag_centers[1][1]) / 2))
                 # Center the handle bar
-                if len(tag_centers) == 2:
-                    self.handleX, self.handleY = (int((tag_centers[0][0] + tag_centers[1][0]) / 2), int((tag_centers[0][1] + tag_centers[1][1]) / 2))
-                if self.handleX < 310:
-                    self.pose["bravo_axis_e"] -= 0.1
-                if self.handleX > 330:
-                    self.pose["bravo_axis_e"] += 0.1
-                if self.handleY < 190:
-                    self.pose["bravo_axis_g"] -= 0.1
-                if self.handleY > 210:
-                    self.pose["bravo_axis_g"] += 0.1
+                self.pose["bravo_axis_a"] = 0.0
+                self.pose["bravo_axis_b"] = math.pi * 0.5
+                self.pose["bravo_axis_c"] = math.pi * 0.5
+                self.pose["bravo_axis_d"] = math.pi * 0
+                self.pose["bravo_axis_f"] = math.pi * 0.9
 
-        # THIS IS AN EXAMPLE TO SHOW YOU HOW TO MOVE THE MANIPULATOR
+                self.pose['bravo_axis_e'] += (self.handleX-320)/640 * math.pi/8
+                self.pose['bravo_axis_g'] += (self.handleY-240)/480 * math.pi/8
+
+
+
 
         # EXAMPLE USAGE OF INVERSE KINEMATICS SOLVER
         #   Inputs: vec3 position, quaternion orientation
