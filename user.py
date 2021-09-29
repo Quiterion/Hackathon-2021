@@ -28,7 +28,11 @@ class User:
             "bravo_axis_f": math.pi * 0.9,
             "bravo_axis_g": math.pi
         }
-        self.inc = 0.1
+        self.inc1 = 0.1
+        self.inc2 = -0.1
+        self.inc3 = 0.1
+        self.inc4 = 0.1
+        self.inc5 = 0.1
         self.last_time = time.time()
         self.random_flag = True
         # Global state of the progress of the arm during the catching sequence
@@ -110,8 +114,8 @@ class User:
         if len(tag_centers) == 0 and self.state != STATES.TWO and self.state != STATES.SEARCHING:
             self.state = STATES.NONE
 
-        #if len(tag_centers) == 1 and self.state != STATES.TWO:
-        #    self.state = STATES.ONE
+        if len(tag_centers) == 1 and self.state != STATES.TWO:
+            self.state = STATES.ONE
 
         if len(tag_centers) == 2:
             self.state = STATES.TWO
@@ -123,31 +127,49 @@ class User:
 
         if self.state == STATES.SEARCHING:
             # Go searching for new tags
-            if self.pose['bravo_axis_e'] > 1 * math.pi :
-                self.inc = -0.2
-            if self.pose['bravo_axis_e'] < 0 * math.pi:
-                self.inc = 0.2
-            self.pose["bravo_axis_e"] += self.inc
-            self.pose["bravo_axis_f"] -= self.inc
-            logging.debug(f"G AXIS VALUE: {self.pose['bravo_axis_g']}")
+            if self.pose['bravo_axis_c'] > 1.000 * math.pi :    # +0.500
+                self.inc1 = -0.1
+            if self.pose['bravo_axis_c'] < 0.250 * math.pi:     # -0.250
+                self.inc1 = 0.1
+            if self.pose['bravo_axis_e'] > 1.000 * math.pi :    # +0.250
+                self.inc2 = -0.1
+            if self.pose['bravo_axis_e'] < 0.250 * math.pi:     # -0.500
+                self.inc2 = 0.1
+            if self.pose['bravo_axis_f'] > 1.400 * math.pi:     # +0.500
+                self.inc3 = -0.1
+            if self.pose['bravo_axis_f'] < 0.650 * math.pi:     # -0.250
+                self.inc3 = 0.1
+            if self.pose['bravo_axis_g'] > 1.2 * math.pi:
+                self.inc4 = -0.05
+            if self.pose['bravo_axis_g'] < 0.80 * math.pi:
+                self.inc4 = 0.05
+            if self.pose['bravo_axis_b'] > 0.8 * math.pi:
+                self.inc5 = -0.05
+            if self.pose['bravo_axis_b'] < -0.8 * math.pi:
+                self.inc5 = 0.05
+            self.pose["bravo_axis_c"] += self.inc1
+            self.pose["bravo_axis_e"] += self.inc2
+            self.pose["bravo_axis_f"] += self.inc3
+            self.pose["bravo_axis_g"] += self.inc4
+            self.pose["bravo_axis_b"] += self.inc5
 
 
-        #if self.state == STATES.ONE:
-        #    # Zoom out if centered
-        #    tagX, tagY = tag_centers[0]
-        #    if (tagX > 300 and tagX < 340) and (tagY > 220 and tagY < 260):
-        #        current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.1)
-        #        self.pose = calcIK(current_pos, current_quat)
-        #    else:
-        #        # Center the April Tag
-        #        if tagX < 310:
-        #            self.pose["bravo_axis_e"] -= 0.1
-        #        if tagX > 330:
-        #            self.pose["bravo_axis_e"] += 0.1
-        #        if tagY < 230:
-        #            self.pose["bravo_axis_g"] -=  0.1
-        #        if tagY > 250:
-        #            self.pose["bravo_axis_g"] += 0.1
+        if self.state == STATES.ONE:
+            # Zoom out if centered
+            tagX, tagY = tag_centers[0]
+            if (tagX > 300 and tagX < 340) and (tagY > 220 and tagY < 260):
+                current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.1)
+                self.pose = calcIK(current_pos, current_quat)
+            else:
+                # Center the April Tag
+                if tagX < 310:
+                    self.pose["bravo_axis_e"] -= 0.1
+                if tagX > 330:
+                    self.pose["bravo_axis_e"] += 0.1
+                if tagY < 230:
+                    self.pose["bravo_axis_g"] -=  0.1
+                if tagY > 250:
+                    self.pose["bravo_axis_g"] += 0.1
 
 
 
@@ -157,7 +179,9 @@ class User:
                 current_pos = (current_pos[0], current_pos[1], current_pos[2] - 0.1)
                 self.pose = calcIK(current_pos, current_quat)
             if current_pos[2] < 0 and self.random_flag:
-                current_pos = (current_pos[0], current_pos[1], current_pos[2])
+                if current_pos[1] < 0.05:
+                    current_pos = (current_pos[0], current_pos[1], current_pos[2])
+                logging.debug(f"WIN STATE FOUND at COORDS: {current_pos}")
                 self.pose = calcIK(current_pos, current_quat)
                 self.random_flag = False
             if len(tag_centers) == 2:
@@ -171,7 +195,7 @@ class User:
                 self.pose["bravo_axis_f"] = math.pi * 0.9
 
                 self.pose['bravo_axis_e'] += (self.handleX-320)/640 * math.pi/8
-                self.pose['bravo_axis_g'] += (self.handleY-240)/480 * math.pi/8
+                self.pose['bravo_axis_g'] += (self.handleY-180)/480 * math.pi/8
 
 
 
