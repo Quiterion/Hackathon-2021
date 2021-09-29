@@ -8,12 +8,14 @@ import cv2
 import apriltag
 import logging
 from enum import Enum
+import random
 logging.basicConfig(filename='user.log', filemode='w', format='%(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 
 class STATES(Enum):
     NONE = 0
     ONE = 1
     TWO = 2
+    SEARCHING = 3
 
 class User:
     def __init__(self) -> None:
@@ -26,7 +28,7 @@ class User:
             "bravo_axis_f": math.pi * 0.9,
             "bravo_axis_g": math.pi
         }
-        self.inc = 0.1
+        self.inc = -0.1
         self.last_time = time.time()
         # Global state of the progress of the arm during the catching sequence
         # (No tags found, one tag found, both tags found)
@@ -61,6 +63,7 @@ class User:
 
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         tag_centers = []
+        current_pos, current_quat = global_poses['end_effector_joint']
 
         # ---------- COPIED FROM https://www.pyimagesearch.com/2020/11/02/apriltag-with-python/ -----------
         #
@@ -93,12 +96,17 @@ class User:
             tagFamily = r.tag_family.decode("utf-8")
             cv2.putText(image, tagFamily, (ptA[0], ptA[1] - 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cv2.putText(image, str(r.tag_id), (ptA[0], ptA[1] - 60),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 4)
             print("[INFO] tag family: {}".format(tagFamily))
 
         # --------------- END OF COPIED CODE -----------------
-        current_pos, current_quat = global_poses['end_effector_joint']
         # Update states
-        if len(tag_centers) == 0 and self.state != STATES.TWO:
+
+        if self.state == STATES.NONE:
+            self.state = STATES.SEARCHING
+
+        if len(tag_centers) == 0 and self.state != STATES.TWO and self.state != STATES.SEARCHING:
             self.state = STATES.NONE
 
         if len(tag_centers) == 1 and self.state != STATES.TWO:
@@ -109,45 +117,58 @@ class User:
 
 
         if self.state == STATES.NONE:
-            # If no tags are visible, go to a default position (TODO: needs refinement)
+            # If no tags are visible, go to a default position
             self.pose = calcIK(np.array([0.8, 0, 1.6]), np.array([1, 0, -1, 0]))
 
+        if self.state == STATES.SEARCHING:
+            # Go searching for new tags
+            if self.pose['bravo_axis_g'] > 1.5 * math.pi :
+                self.inc = -0.1
+            if self.pose['bravo_axis_g'] < -0.5 * math.pi:
+                self.inc = 0.1
+            self.pose["bravo_axis_g"] += self.inc
+            logging.debug(f"G AXIS VALUE: {self.pose['bravo_axis_g']}")
+
+
         if self.state == STATES.ONE:
-            # Only found one tag so far, center it first
+            # Zoom out if centered
             tagX, tagY = tag_centers[0]
-            if tagX < 320:
-                self.pose["bravo_axis_e"] -= self.inc
-            if tagX > 320:
-                self.pose["bravo_axis_e"] += self.inc
-            if tagY < 240:
-                self.pose["bravo_axis_f"] -=  self.inc
-            if tagY > 240:
-                self.pose["bravo_axis_f"] += self.inc
-            # Zoom out once centered (TODO: figure out quaternion transformation to zoom out at any orientation)
-            #if (tagX == 320 and tagY == 240):
-            #    current_pos = (current_pos[0], current_pos[1], current_pos[2] + self.inc)
-            #    self.pose = calcIK(current_pos, current_quat)
+            if (tagX > 300 and tagX < 340) and (tagY > 220 and tagY < 260):
+                current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.1)
+                self.pose = calcIK(current_pos, current_quat)
+            else:
+                # Center the April Tag
+                if tagX < 310:
+                    self.pose["bravo_axis_e"] -= 0.1
+                if tagX > 330:
+                    self.pose["bravo_axis_e"] += 0.1
+                if tagY < 230:
+                    self.pose["bravo_axis_g"] -=  0.1
+                if tagY > 250:
+                    self.pose["bravo_axis_g"] += 0.1
 
 
 
         if self.state == STATES.TWO:
-            cv2.circle(image, (self.handleX, self.handleY), 5, (255, 0, 0), 2)
-            # Center the handle bar
-            if len(tag_centers) == 2:
-                self.handleX, self.handleY = (int((tag_centers[0][0] + tag_centers[1][0]) / 2), int((tag_centers[0][1] + tag_centers[1][1]) / 2))
-            if self.handleX < 320:
-                self.pose["bravo_axis_e"] -= self.inc
-            if self.handleX > 320:
-                self.pose["bravo_axis_e"] += self.inc
-            if self.handleY < 240:
-                self.pose["bravo_axis_f"] -=  self.inc
-            if self.handleY > 240:
-                self.pose["bravo_axis_f"] += self.inc
-            # Zoom in
-            if (self.handleX == 320 and self.handleY == 240):
+            # Zoom in if centered
+            # TODO: improve centering technique
+            cv2.circle(image, (self.handleX, self.handleY), 5, (255, 0, 0), 8)
+            if (self.handleX > 310 and self.handleX < 330) and (self.handleY > 190 and self.handleY < 210):
                 if current_pos[2] > 0:
-                    current_pos = (current_pos[0], current_pos[1], current_pos[2] - self.inc)
+                    current_pos = (current_pos[0], current_pos[1], current_pos[2] - 0.1)
                     self.pose = calcIK(current_pos, current_quat)
+            else:
+                # Center the handle bar
+                if len(tag_centers) == 2:
+                    self.handleX, self.handleY = (int((tag_centers[0][0] + tag_centers[1][0]) / 2), int((tag_centers[0][1] + tag_centers[1][1]) / 2))
+                if self.handleX < 310:
+                    self.pose["bravo_axis_e"] -= 0.1
+                if self.handleX > 330:
+                    self.pose["bravo_axis_e"] += 0.1
+                if self.handleY < 190:
+                    self.pose["bravo_axis_g"] -= 0.1
+                if self.handleY > 210:
+                    self.pose["bravo_axis_g"] += 0.1
 
         # THIS IS AN EXAMPLE TO SHOW YOU HOW TO MOVE THE MANIPULATOR
 
@@ -155,6 +176,7 @@ class User:
         #   Inputs: vec3 position, quaternion orientation
         # self.pose = calcIK(np.array([0.8, 0, 0.4]), np.array([1, 0, 0, 0]))
 
+        cv2.putText(image, str(self.state), (10, 440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_AA)
         cv2.imshow("View", image)
         cv2.waitKey(1)
         return self.pose
