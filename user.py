@@ -28,6 +28,7 @@ class User:
             "bravo_axis_f": math.pi * 0.9,
             "bravo_axis_g": math.pi
         }
+        self.inc = 0.05
         self.inc1 = 0.1
         self.inc2 = -0.1
         self.inc3 = 0.1
@@ -39,6 +40,7 @@ class User:
         # (No tags found, one tag found, both tags found)
         self.state = STATES.NONE
         self.handleX, self.handleY = (320, 240)
+        self.adjustments = [0,0]
 
         return
 
@@ -175,16 +177,20 @@ class User:
 
         if self.state == STATES.TWO:
             cv2.circle(image, (self.handleX, self.handleY), 5, (255, 0, 0), 8)
-            if current_pos[2] >= 0:
-                current_pos = (current_pos[0], current_pos[1], current_pos[2] - 0.1)
-                self.pose = calcIK(current_pos, current_quat)
-            if current_pos[2] < 0 and self.random_flag:
-                if current_pos[1] < 0.05:
-                    current_pos = (current_pos[0], current_pos[1], current_pos[2])
-                logging.debug(f"WIN STATE FOUND at COORDS: {current_pos}")
-                self.pose = calcIK(current_pos, current_quat)
-                self.random_flag = False
+
+            if current_pos[2] > 0.25:
+                self.state = STATES.NONE
+
+            current_pos = (current_pos[0], current_pos[1], current_pos[2] - 0.1 + self.inc)
+            self.pose = calcIK(current_pos, current_quat)
+            #if current_pos[2] < 0 and self.random_flag:
+            #    self.pose = calcIK(current_pos, current_quat)
+                #self.pose["bravo_axis_e"] += self.adjustments[0]
+                #self.pose["bravo_axis_g"] -= self.adjustments[1]
+             #   self.random_flag = False
+            self.inc += 0.005
             if len(tag_centers) == 2:
+                self.inc = 0
                 # Get handle bar coordinates when both tags are visible
                 self.handleX, self.handleY = (int((tag_centers[0][0] + tag_centers[1][0]) / 2), int((tag_centers[0][1] + tag_centers[1][1]) / 2))
                 # Center the handle bar
@@ -194,8 +200,9 @@ class User:
                 self.pose["bravo_axis_d"] = math.pi * 0
                 self.pose["bravo_axis_f"] = math.pi * 0.9
 
-                self.pose['bravo_axis_e'] += (self.handleX-320)/640 * math.pi/8
-                self.pose['bravo_axis_g'] += (self.handleY-180)/480 * math.pi/8
+                # This 1.5 constant is tripping us up
+                self.pose["bravo_axis_e"] += (self.handleX-320)/640 * (2.0) * math.pi
+                self.pose["bravo_axis_g"] += (self.handleY-240)/480 * (2.0-(0.25-current_pos[2])/0.125) * math.pi
 
 
 
