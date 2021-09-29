@@ -145,7 +145,7 @@ class User:
                 self.pose["bravo_axis_f"] += self.inc
             # Zoom in
             if (self.handleX == 320 and self.handleY == 240):
-                if current_pos[3] > 0:
+                if current_pos[2] > 0:
                     current_pos = (current_pos[0], current_pos[1], current_pos[2] - self.inc)
                     self.pose = calcIK(current_pos, current_quat)
 
