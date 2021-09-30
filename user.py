@@ -21,7 +21,7 @@ class STATES(Enum):
 class User:
     def __init__(self) -> None:
         self.pose = {
-            "bravo_axis_a": 0.0,
+            "bravo_axis_a": 0,
             "bravo_axis_b": math.pi * 0.5,
             "bravo_axis_c": math.pi * 0.5,
             "bravo_axis_d": math.pi * 0,
@@ -90,7 +90,7 @@ class User:
         options = apriltag.DetectorOptions(families="tag36h11")
         detector = apriltag.Detector(options)
         results = detector.detect(gray)
-        print("[INFO] {} total AprilTags detected".format(len(results)))
+        #print("[INFO] {} total AprilTags detected".format(len(results)))
         # loop over the AprilTag detection results
         for r in results:
             # extract the bounding box (x, y)-coordinates for the AprilTag
@@ -115,7 +115,7 @@ class User:
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             cv2.putText(image, str(r.tag_id), (ptA[0], ptA[1] - 60),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 4)
-            print("[INFO] tag family: {}".format(tagFamily))
+            #print("[INFO] tag family: {}".format(tagFamily))
 
         # --------------- END OF COPIED CODE -----------------
         # Update states
@@ -155,23 +155,33 @@ class User:
                 self.inc4 = -0.05
             if self.pose['bravo_axis_g'] < 0.80 * math.pi:
                 self.inc4 = 0.05
-            if self.pose['bravo_axis_b'] > 0.8 * math.pi:
-                self.inc5 = -0.05
-            if self.pose['bravo_axis_b'] < -0.8 * math.pi:
-                self.inc5 = 0.05
+            # if self.pose['bravo_axis_b'] > 0.8 * math.pi:
+            #     self.inc5 = -0.05
+            # if self.pose['bravo_axis_b'] < -0.8 * math.pi:
+            #     self.inc5 = 0.05
             self.pose["bravo_axis_c"] += self.inc1
             self.pose["bravo_axis_e"] += self.inc2
             self.pose["bravo_axis_f"] += self.inc3
             self.pose["bravo_axis_g"] += self.inc4
-            self.pose["bravo_axis_b"] += self.inc5
+            # self.pose["bravo_axis_b"] += self.inc5
 
 
         if self.state == STATES.ONE:
             # Zoom out if centered
             tagX, tagY = tag_centers[0]
             if (tagX > 300 and tagX < 340) and (tagY > 220 and tagY < 260):
-                current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.1)
+                #just changes the z out (precalculated)
+                current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.13)
                 self.pose = calcIK(current_pos, current_quat)
+                # if it is the left one it would extend out
+                if r.tag_id == "0":
+                    self.pose["bravo_axis_f"] += 0.2
+                    self.pose["bravo_axis_c"] -= 0.1
+                #if its the other on2e then pull in
+                if r.tag_id == "1":
+                    self.pose["bravo_axis_f"] -= 0.2
+                    self.pose["bravo_axis_e"] += 0.2
+                    self.pose["bravo_axis_c"] -= 0.2
             else:
                 # Center the April Tag
                 if tagX < 310:
@@ -188,7 +198,7 @@ class User:
         if self.state == STATES.TWO:
             cv2.circle(image, (self.handleX, self.handleY), 5, (255, 0, 0), 8)
 
-            if current_pos[2] > 0.25:
+            if current_pos[2] > 0.4:
                 self.random_flag = True
                 self.state = STATES.NONE
             #current_pos = (current_pos[0], current_pos[1], current_pos[2] - 0.1 + self.inc)
@@ -208,19 +218,20 @@ class User:
                 # Get handle bar coordinates when both tags are visible
                 self.handleX, self.handleY = (int((tag_centers[0][0] + tag_centers[1][0]) / 2), int((tag_centers[0][1] + tag_centers[1][1]) / 2))
                 # Center the handle bar
-                #self.pose["bravo_axis_a"] = 0.0
-                #self.pose["bravo_axis_b"] = math.pi * 0.5
-                #self.pose["bravo_axis_c"] = math.pi * 0.5
-                #self.pose["bravo_axis_d"] = math.pi * 0
-                #self.pose["bravo_axis_f"] = math.pi * 0.9
+                # self.pose["bravo_axis_a"] = 0.0
+                # self.pose["bravo_axis_b"] = math.pi * 0.5
+                # self.pose["bravo_axis_c"] = math.pi * 0.5
+                # self.pose["bravo_axis_d"] = math.pi * 0
+                # self.pose["bravo_axis_f"] = math.pi * 0.9
+
                 fl = 640 /(2 * math.tan(100 * math.pi / 360))
                 intrinsicMatrix = np.asmatrix([[fl, 0, 320],[0, fl, 240],[0,0,1]])
                 handlePos = np.matmul(np.linalg.inv(intrinsicMatrix), np.asmatrix([[self.handleX], [self.handleY], [1]])) * cam_pos[2]
                 self.pose = calcIK(handlePos, current_quat)
 
                 # This 1.5 constant is tripping us up
-                #self.pose["bravo_axis_e"] += (self.handleX-320)/640 * (2.0) * math.pi
-                #self.pose["bravo_axis_g"] += (self.handleY-240)/480 * (2.0-(0.25-current_pos[2])/0.25) * math.pi
+                # self.pose["bravo_axis_e"] += (self.handleX-320)/640 * (2.0) * math.pi
+                # self.pose["bravo_axis_g"] += (self.handleY-240)/480 * (2.0-(0.25-current_pos[2])/0.25) * math.pi
 
 
 
