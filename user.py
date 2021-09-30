@@ -167,8 +167,10 @@ class User:
 
 
         if self.state == STATES.ONE:
-            # Zoom out if centered
+            ## Zoom out if centered
+
             tagX, tagY = tag_centers[0]
+
             if (tagX > 300 and tagX < 340) and (tagY > 220 and tagY < 260):
                 #just changes the z out (precalculated)
                 current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.13)
@@ -182,16 +184,15 @@ class User:
                     self.pose["bravo_axis_f"] -= 0.2
                     self.pose["bravo_axis_e"] += 0.2
                     self.pose["bravo_axis_c"] -= 0.2
-            else:
-                # Center the April Tag
-                if tagX < 310:
-                    self.pose["bravo_axis_e"] -= 0.1
-                if tagX > 330:
-                    self.pose["bravo_axis_e"] += 0.1
-                if tagY < 230:
-                    self.pose["bravo_axis_g"] -=  0.1
-                if tagY > 250:
-                    self.pose["bravo_axis_g"] += 0.1
+            # Center the April Tag
+            if tagX < 310:
+                self.pose["bravo_axis_e"] -= 0.01
+            if tagX > 330:
+                self.pose["bravo_axis_e"] += 0.01
+            if tagY < 240:
+                self.pose["bravo_axis_g"] -=  0.01
+            if tagY > 260:
+                self.pose["bravo_axis_g"] += 0.01
 
 
 
