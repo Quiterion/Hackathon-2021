@@ -9,6 +9,7 @@ import apriltag
 import logging
 from enum import Enum
 import random
+
 logging.basicConfig(filename='user.log', filemode='w', format='%(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 
 class STATES(Enum):
@@ -49,6 +50,7 @@ class User:
             image: list,
             global_poses: Dict[str, np.ndarray],
             calcIK: Callable[[np.ndarray, Optional[np.ndarray]], Dict[str, float]],
+            projectionMatrix
             ) -> Dict[str, float]:
         """Run loop to control the Bravo manipulator.
 
@@ -71,10 +73,18 @@ class User:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         tag_centers = []
         current_pos, current_quat = global_poses['end_effector_joint']
+        cam_pos, cam_quat = global_poses['camera_end_joint']
+
+        cv2.putText(image, "Effector Position: {0:.4f}, {1:.4f}, {2:.4f}".format(current_pos[0], current_pos[1], current_pos[2]), (10, 380), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(image, "Camera Position: {0:.4f}, {1:.4f}, {2:.4f}".format(cam_pos[0], cam_pos[1], cam_pos[2]), (10, 400), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(image, "Effector Quaternion: {0:.4f}, {1:.4f}, {2:.4f}, {3:.4f}".format(current_quat[0], current_quat[1], current_quat[2], current_quat[3]), (10, 420), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(image, "Camera Quaternion: {0:.4f}, {1:.4f}, {2:.4f}, {3:.4f}".format(cam_quat[0], cam_quat[1], cam_quat[2], cam_quat[3]), (10, 440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_AA)
 
         # ---------- COPIED FROM https://www.pyimagesearch.com/2020/11/02/apriltag-with-python/ -----------
         #
-        # define the AprilTags detector options and then detect the AprilTags
+        # define the AprilTags detector options and then detect theGeometry and Transformations
+
+
         # in the input image
         print("[INFO] detecting AprilTags...")
         options = apriltag.DetectorOptions(families="tag36h11")
@@ -179,30 +189,38 @@ class User:
             cv2.circle(image, (self.handleX, self.handleY), 5, (255, 0, 0), 8)
 
             if current_pos[2] > 0.25:
+                self.random_flag = True
                 self.state = STATES.NONE
-
-            current_pos = (current_pos[0], current_pos[1], current_pos[2] - 0.1 + self.inc)
+            #current_pos = (current_pos[0], current_pos[1], current_pos[2] - 0.1 + self.inc)
             self.pose = calcIK(current_pos, current_quat)
-            #if current_pos[2] < 0 and self.random_flag:
-            #    self.pose = calcIK(current_pos, current_quat)
+            if current_pos[2] < 0 and self.random_flag:
+                #self.pose = calcIK(current_pos, current_quat)
                 #self.pose["bravo_axis_e"] += self.adjustments[0]
                 #self.pose["bravo_axis_g"] -= self.adjustments[1]
-             #   self.random_flag = False
+
+                self.random_flag = False
+            #if not self.random_flag:
+            #           self.pose["bravo_axis_g"] += 0.005 * math.pi
+
             self.inc += 0.005
             if len(tag_centers) == 2:
                 self.inc = 0
                 # Get handle bar coordinates when both tags are visible
                 self.handleX, self.handleY = (int((tag_centers[0][0] + tag_centers[1][0]) / 2), int((tag_centers[0][1] + tag_centers[1][1]) / 2))
                 # Center the handle bar
-                self.pose["bravo_axis_a"] = 0.0
-                self.pose["bravo_axis_b"] = math.pi * 0.5
-                self.pose["bravo_axis_c"] = math.pi * 0.5
-                self.pose["bravo_axis_d"] = math.pi * 0
-                self.pose["bravo_axis_f"] = math.pi * 0.9
+                #self.pose["bravo_axis_a"] = 0.0
+                #self.pose["bravo_axis_b"] = math.pi * 0.5
+                #self.pose["bravo_axis_c"] = math.pi * 0.5
+                #self.pose["bravo_axis_d"] = math.pi * 0
+                #self.pose["bravo_axis_f"] = math.pi * 0.9
+                fl = 640 /(2 * math.tan(100 * math.pi / 360))
+                intrinsicMatrix = np.asmatrix([[fl, 0, 320],[0, fl, 240],[0,0,1]])
+                handlePos = np.matmul(np.linalg.inv(intrinsicMatrix), np.asmatrix([[self.handleX], [self.handleY], [1]])) * cam_pos[2]
+                self.pose = calcIK(handlePos, current_quat)
 
                 # This 1.5 constant is tripping us up
-                self.pose["bravo_axis_e"] += (self.handleX-320)/640 * (2.0) * math.pi
-                self.pose["bravo_axis_g"] += (self.handleY-240)/480 * (2.0-(0.25-current_pos[2])/0.125) * math.pi
+                #self.pose["bravo_axis_e"] += (self.handleX-320)/640 * (2.0) * math.pi
+                #self.pose["bravo_axis_g"] += (self.handleY-240)/480 * (2.0-(0.25-current_pos[2])/0.25) * math.pi
 
 
 
@@ -211,7 +229,7 @@ class User:
         #   Inputs: vec3 position, quaternion orientation
         # self.pose = calcIK(np.array([0.8, 0, 0.4]), np.array([1, 0, 0, 0]))
 
-        cv2.putText(image, str(self.state), (10, 440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(image, str(self.state), (10, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_AA)
         cv2.imshow("View", image)
         cv2.waitKey(1)
         return self.pose
