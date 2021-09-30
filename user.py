@@ -14,9 +14,9 @@ logging.basicConfig(filename='user.log', filemode='w', format='%(name)s - %(leve
 
 class STATES(Enum):
     NONE = 0
-    ONE = 1
-    TWO = 2
-    SEARCHING = 3
+    SEARCHING = 1
+    ONE = 2
+    CENTERED = 3
 
 class User:
     def __init__(self) -> None:
@@ -36,12 +36,12 @@ class User:
         self.inc4 = 0.1
         self.inc5 = 0.1
         self.last_time = time.time()
-        self.random_flag = True
+        self.centered_tag = None
+        self.tagX = 320
+        self.tagY = 250
         # Global state of the progress of the arm during the catching sequence
         # (No tags found, one tag found, both tags found)
         self.state = STATES.NONE
-        self.handleX, self.handleY = (320, 240)
-        self.adjustments = [0,0]
 
         return
 
@@ -106,7 +106,7 @@ class User:
             cv2.line(image, ptD, ptA, (0, 255, 0), 2)
             # draw the center (x, y)-coordinates of the AprilTag
             (cX, cY) = (int(r.center[0]), int(r.center[1]))
-            tag_centers.append( (cX, cY))
+            tag_centers.append( ((cX, cY), r.tag_id))
             cv2.circle(image, (cX, cY), 5, (0, 0, 255), -1)
             # draw the tag family on the image
             tagFamily = r.tag_family.decode("utf-8")
@@ -122,10 +122,10 @@ class User:
         if self.state == STATES.NONE:
             self.state = STATES.SEARCHING
 
-        if len(tag_centers) == 0 and self.state != STATES.SEARCHING:
+        if len(tag_centers) == 0 and self.state != STATES.SEARCHING and self.state != STATES.CENTERED:
             self.state = STATES.NONE
 
-        if len(tag_centers) == 1:
+        if len(tag_centers) > 0 and self.state != STATES.CENTERED:
             self.state = STATES.ONE
 
 
@@ -133,7 +133,7 @@ class User:
             # If no tags are visible, go to a default position
             self.pose = calcIK(np.array([3, 0, 1.6]), np.array([1, 0, -1, 0]))
 
-        if self.state == STATES.SEARCHING:
+        elif self.state == STATES.SEARCHING:
             # Go searching for new tags
             if self.pose['bravo_axis_c'] > 1.000 * math.pi :    # +0.500
                 self.inc1 = -0.1
@@ -147,7 +147,7 @@ class User:
                 self.inc3 = -0.1
             if self.pose['bravo_axis_f'] < 0.650 * math.pi:     # -0.250
                 self.inc3 = 0.1
-            if self.pose['bravo_axis_g'] > 1.2 * math.pi:
+            if self.pose['bravo_axis_g'] > 1.3 * math.pi:
                 self.inc4 = -0.05
             if self.pose['bravo_axis_g'] < 0.80 * math.pi:
                 self.inc4 = 0.05
@@ -158,35 +158,71 @@ class User:
             self.pose["bravo_axis_c"] += self.inc1
             self.pose["bravo_axis_e"] += self.inc2
             self.pose["bravo_axis_f"] += self.inc3
-            self.pose["bravo_axis_g"] += self.inc4
+            self.pose["bravo_axis_g"] -= self.inc4
             self.pose["bravo_axis_b"] += self.inc5
 
 
-        if self.state == STATES.ONE:
+
+        elif self.state == STATES.ONE:
             ## Zoom out if centered
-            #tagX, tagY = tag_centers[0]
-            #if (tagX > 300 and tagX < 340) and (tagY > 220 and tagY < 260):
-            #    #just changes the z out (precalculated)
-            #    current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.13)
-            #    self.pose = calcIK(current_pos, current_quat)
-            #    # if it is the left one it would extend out
-            #    if r.tag_id == "0":
-            #        self.pose["bravo_axis_f"] += 0.2
-            #        self.pose["bravo_axis_c"] -= 0.1
-            #    #if its the other on2e then pull in
-            #    if r.tag_id == "1":
-            #        self.pose["bravo_axis_f"] -= 0.2
-            #        self.pose["bravo_axis_e"] += 0.2
-            #        self.pose["bravo_axis_c"] -= 0.2
+            if len(tag_centers) == 2:
+                first_tag_dist = math.sqrt( (320-tag_centers[0][0][0])**2 + (250-tag_centers[0][0][1])**2 )
+                second_tag_dist = math.sqrt( (320-tag_centers[1][0][0])**2 + (250-tag_centers[1][0][1])**2 )
+
+                if first_tag_dist < second_tag_dist:
+                    self.tagX, self.tagY = tag_centers[0][0]
+                    tag_id = tag_centers[0][1]
+                else:
+                    self.tagX, self.tagY = tag_centers[1][0]
+                    tag_id = tag_centers[1][1]
+            else:
+                self.tagX, self.tagY = tag_centers[0][0]
+                tag_id = tag_centers[0][1]
+
             # Center the April Tag
-            if tagX < 310:
-                self.pose["bravo_axis_e"] -= 0.1
-            if tagX > 330:
-                self.pose["bravo_axis_e"] += 0.1
-            if tagY < 230:
-                self.pose["bravo_axis_g"] -=  0.1
-            if tagY > 250:
-                self.pose["bravo_axis_g"] += 0.1
+            if (self.tagX >= 310 and self.tagX <= 330) and (self.tagY >= 240 and self.tagY <= 260):
+                # Centered
+                self.centered_tag = tag_id
+                # reorient hand to point correctly
+                fl = 640 /(2 * math.tan(100 * math.pi / 360))
+
+                intrinsicMatrix = np.asmatrix([[fl, 0, 320],[0, fl, 240],[0,0,1]])
+                tagPos = np.matmul(np.linalg.inv(intrinsicMatrix), np.asmatrix([[self.tagX], [self.tagY], [1]])) * cam_pos[2]
+
+                if self.centered_tag == 0:
+                   current_pos = (current_pos[0] + tagPos[0] + 0.25, current_pos[1] +tagPos[1] - 0.12, current_pos[2] +tagPos[2])
+                if self.centered_tag == 1:
+                   current_pos = (current_pos[0] + tagPos[0] - 0.2, current_pos[1] +tagPos[1] - 0.12, current_pos[2] +tagPos[2])
+                #self.pose = calcIK(current_pos, np.array([1, 0, -1, 0]))
+                self.pose = calcIK(current_pos, current_quat)
+                self.state = STATES.CENTERED
+
+            if self.tagX < 310:
+                self.pose["bravo_axis_e"] -= 0.025
+            if self.tagX > 330:
+                self.pose["bravo_axis_e"] += 0.025
+            if self.tagY < 240:
+                self.pose["bravo_axis_g"] -=  0.025
+            if self.tagY > 260:
+                self.pose["bravo_axis_g"] += 0.025
+
+
+            elif self.state == STATES.CENTERED:
+
+                #if current_pos[2] > 0.25:
+                #    self.random_flag = True
+                #    self.state = STATES.NONE
+
+                current_pos = (current_pos[0], current_pos[1], -0.1)
+                self.pose = calcIK(current_pos, np.array([1, 0, -1, 0]))
+                #self.pose = calcIK(current_pos, current_quat)
+
+                #if current_pos[2] < 0 and self.random_flag:
+                #    self.random_flag = False
+                #self.inc += 0.005
+                #if len(tag_centers) > 0:
+                #    self.inc = 0
+
 
 
 
@@ -194,7 +230,7 @@ class User:
         #   Inputs: vec3 position, quaternion orientation
         # self.pose = calcIK(np.array([0.8, 0, 0.4]), np.array([1, 0, 0, 0]))
 
-        cv2.putText(image, str(self.state), (10, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(image, str(self.state) + f" TAG: {self.centered_tag}", (10, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_AA)
         cv2.imshow("View", image)
         cv2.waitKey(1)
         return self.pose
