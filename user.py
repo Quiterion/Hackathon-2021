@@ -49,8 +49,7 @@ class User:
     def run(self,
             image: list,
             global_poses: Dict[str, np.ndarray],
-            calcIK: Callable[[np.ndarray, Optional[np.ndarray]], Dict[str, float]],
-            projectionMatrix
+            calcIK: Callable[[np.ndarray, Optional[np.ndarray]], Dict[str, float]]
             ) -> Dict[str, float]:
         """Run loop to control the Bravo manipulator.
 
@@ -107,7 +106,7 @@ class User:
             cv2.line(image, ptD, ptA, (0, 255, 0), 2)
             # draw the center (x, y)-coordinates of the AprilTag
             (cX, cY) = (int(r.center[0]), int(r.center[1]))
-            tag_centers.append( (cX, cY) )
+            tag_centers.append( (cX, cY))
             cv2.circle(image, (cX, cY), 5, (0, 0, 255), -1)
             # draw the tag family on the image
             tagFamily = r.tag_family.decode("utf-8")
@@ -123,14 +122,11 @@ class User:
         if self.state == STATES.NONE:
             self.state = STATES.SEARCHING
 
-        if len(tag_centers) == 0 and self.state != STATES.TWO and self.state != STATES.SEARCHING:
+        if len(tag_centers) == 0 and self.state != STATES.SEARCHING:
             self.state = STATES.NONE
 
-        if len(tag_centers) == 1 and self.state != STATES.TWO:
+        if len(tag_centers) == 1:
             self.state = STATES.ONE
-
-        if len(tag_centers) == 2:
-            self.state = STATES.TWO
 
 
         if self.state == STATES.NONE:
@@ -167,61 +163,30 @@ class User:
 
 
         if self.state == STATES.ONE:
-            # Zoom out if centered
-            tagX, tagY = tag_centers[0]
-            if (tagX > 300 and tagX < 340) and (tagY > 220 and tagY < 260):
-                current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.1)
-                self.pose = calcIK(current_pos, current_quat)
-            else:
-                # Center the April Tag
-                if tagX < 310:
-                    self.pose["bravo_axis_e"] -= 0.1
-                if tagX > 330:
-                    self.pose["bravo_axis_e"] += 0.1
-                if tagY < 230:
-                    self.pose["bravo_axis_g"] -=  0.1
-                if tagY > 250:
-                    self.pose["bravo_axis_g"] += 0.1
-
-
-
-        if self.state == STATES.TWO:
-            cv2.circle(image, (self.handleX, self.handleY), 5, (255, 0, 0), 8)
-
-            if current_pos[2] > 0.25:
-                self.random_flag = True
-                self.state = STATES.NONE
-            #current_pos = (current_pos[0], current_pos[1], current_pos[2] - 0.1 + self.inc)
-            self.pose = calcIK(current_pos, current_quat)
-            if current_pos[2] < 0 and self.random_flag:
-                #self.pose = calcIK(current_pos, current_quat)
-                #self.pose["bravo_axis_e"] += self.adjustments[0]
-                #self.pose["bravo_axis_g"] -= self.adjustments[1]
-
-                self.random_flag = False
-            #if not self.random_flag:
-            #           self.pose["bravo_axis_g"] += 0.005 * math.pi
-
-            self.inc += 0.005
-            if len(tag_centers) == 2:
-                self.inc = 0
-                # Get handle bar coordinates when both tags are visible
-                self.handleX, self.handleY = (int((tag_centers[0][0] + tag_centers[1][0]) / 2), int((tag_centers[0][1] + tag_centers[1][1]) / 2))
-                # Center the handle bar
-                #self.pose["bravo_axis_a"] = 0.0
-                #self.pose["bravo_axis_b"] = math.pi * 0.5
-                #self.pose["bravo_axis_c"] = math.pi * 0.5
-                #self.pose["bravo_axis_d"] = math.pi * 0
-                #self.pose["bravo_axis_f"] = math.pi * 0.9
-                fl = 640 /(2 * math.tan(100 * math.pi / 360))
-                intrinsicMatrix = np.asmatrix([[fl, 0, 320],[0, fl, 240],[0,0,1]])
-                handlePos = np.matmul(np.linalg.inv(intrinsicMatrix), np.asmatrix([[self.handleX], [self.handleY], [1]])) * cam_pos[2]
-                self.pose = calcIK(handlePos, current_quat)
-
-                # This 1.5 constant is tripping us up
-                #self.pose["bravo_axis_e"] += (self.handleX-320)/640 * (2.0) * math.pi
-                #self.pose["bravo_axis_g"] += (self.handleY-240)/480 * (2.0-(0.25-current_pos[2])/0.25) * math.pi
-
+            ## Zoom out if centered
+            #tagX, tagY = tag_centers[0]
+            #if (tagX > 300 and tagX < 340) and (tagY > 220 and tagY < 260):
+            #    #just changes the z out (precalculated)
+            #    current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.13)
+            #    self.pose = calcIK(current_pos, current_quat)
+            #    # if it is the left one it would extend out
+            #    if r.tag_id == "0":
+            #        self.pose["bravo_axis_f"] += 0.2
+            #        self.pose["bravo_axis_c"] -= 0.1
+            #    #if its the other on2e then pull in
+            #    if r.tag_id == "1":
+            #        self.pose["bravo_axis_f"] -= 0.2
+            #        self.pose["bravo_axis_e"] += 0.2
+            #        self.pose["bravo_axis_c"] -= 0.2
+            # Center the April Tag
+            if tagX < 310:
+                self.pose["bravo_axis_e"] -= 0.1
+            if tagX > 330:
+                self.pose["bravo_axis_e"] += 0.1
+            if tagY < 230:
+                self.pose["bravo_axis_g"] -=  0.1
+            if tagY > 250:
+                self.pose["bravo_axis_g"] += 0.1
 
 
 
