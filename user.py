@@ -16,7 +16,8 @@ class STATES(Enum):
     NONE = 0
     SEARCHING = 1
     ONE = 2
-    CENTERED = 3
+    ALIGN = 3
+    GRAB = 4
 
 class User:
     def __init__(self) -> None:
@@ -33,12 +34,12 @@ class User:
         self.inc1 = 0.1
         self.inc2 = -0.1
         self.inc3 = 0.1
-        self.inc4 = 0.1
-        self.inc5 = 0.1
+        self.inc4 = 0.001
         self.last_time = time.time()
         self.centered_tag = None
         self.tagX = 320
         self.tagY = 250
+        self.last_time = None
         # Global state of the progress of the arm during the catching sequence
         # (No tags found, one tag found, both tags found)
         self.state = STATES.NONE
@@ -119,19 +120,15 @@ class User:
         # --------------- END OF COPIED CODE -----------------
         # Update states
 
-        if self.state == STATES.NONE:
-            self.state = STATES.SEARCHING
-
-        if len(tag_centers) == 0 and self.state != STATES.SEARCHING and self.state != STATES.CENTERED:
+        if len(tag_centers) == 0 and self.state == STATES.ONE:
             self.state = STATES.NONE
 
-        if len(tag_centers) > 0 and self.state != STATES.CENTERED:
+        if len(tag_centers) > 0 and self.state == STATES.SEARCHING:
             self.state = STATES.ONE
 
-
         if self.state == STATES.NONE:
-            # If no tags are visible, go to a default position
-            self.pose = calcIK(np.array([3, 0, 1.6]), np.array([1, 0, -1, 0]))
+            #self.pose = calcIK(np.array([3, 0, 1.6]), np.array([1, 0, -1, 0]))
+            self.state = STATES.SEARCHING
 
         elif self.state == STATES.SEARCHING:
             # Go searching for new tags
@@ -147,19 +144,14 @@ class User:
                 self.inc3 = -0.1
             if self.pose['bravo_axis_f'] < 0.650 * math.pi:     # -0.250
                 self.inc3 = 0.1
-            if self.pose['bravo_axis_g'] > 1.3 * math.pi:
-                self.inc4 = -0.05
-            if self.pose['bravo_axis_g'] < 0.80 * math.pi:
-                self.inc4 = 0.05
-            if self.pose['bravo_axis_b'] > 0.8 * math.pi:
-                self.inc5 = -0.05
-            if self.pose['bravo_axis_b'] < -0.8 * math.pi:
-                self.inc5 = 0.05
+            if self.pose['bravo_axis_g'] > 1.5 * math.pi:
+                self.inc4 = -0.1
+            if self.pose['bravo_axis_g'] < 0.5 * math.pi:
+                self.inc4 = 0.1
             self.pose["bravo_axis_c"] += self.inc1
             self.pose["bravo_axis_e"] += self.inc2
             self.pose["bravo_axis_f"] += self.inc3
             self.pose["bravo_axis_g"] -= self.inc4
-            self.pose["bravo_axis_b"] += self.inc5
 
 
 
@@ -184,18 +176,17 @@ class User:
                 # Centered
                 self.centered_tag = tag_id
                 # reorient hand to point correctly
-                fl = 640 /(2 * math.tan(100 * math.pi / 360))
-
-                intrinsicMatrix = np.asmatrix([[fl, 0, 320],[0, fl, 240],[0,0,1]])
-                tagPos = np.matmul(np.linalg.inv(intrinsicMatrix), np.asmatrix([[self.tagX], [self.tagY], [1]])) * cam_pos[2]
-
-                if self.centered_tag == 0:
-                   current_pos = (current_pos[0] + tagPos[0] + 0.25, current_pos[1] +tagPos[1] - 0.12, current_pos[2] +tagPos[2])
-                if self.centered_tag == 1:
-                   current_pos = (current_pos[0] + tagPos[0] - 0.2, current_pos[1] +tagPos[1] - 0.12, current_pos[2] +tagPos[2])
-                #self.pose = calcIK(current_pos, np.array([1, 0, -1, 0]))
-                self.pose = calcIK(current_pos, current_quat)
-                self.state = STATES.CENTERED
+#                fl = 640 /(2 * math.tan(100 * math.pi / 360))
+#
+#                intrinsicMatrix = np.asmatrix([[fl, 0, 320],[0, fl, 240],[0,0,1]])
+#                tagPos = np.matmul(np.linalg.inv(intrinsicMatrix), np.asmatrix([[self.tagX], [self.tagY], [1]])) * cam_pos[2]
+#
+#                if self.centered_tag == 0:
+#                   current_pos = (current_pos[0] + tagPos[0] + 0.25, current_pos[1] +tagPos[1] - 0.12, current_pos[2] +tagPos[2])
+#                if self.centered_tag == 1:
+#                   current_pos = (current_pos[0] + tagPos[0] - 0.2, current_pos[1] +tagPos[1] - 0.12, current_pos[2] +tagPos[2])
+                self.pose = calcIK(current_pos, np.array([1,0,-1,0]))
+                self.state = STATES.ALIGN
 
             if self.tagX < 310:
                 self.pose["bravo_axis_e"] -= 0.025
@@ -207,23 +198,28 @@ class User:
                 self.pose["bravo_axis_g"] += 0.025
 
 
-            elif self.state == STATES.CENTERED:
+        elif self.state == STATES.ALIGN:
+                if self.last_time == None:
+                    self.last_time = time.time()
+                    if self.centered_tag == 0:
+                       current_pos += np.array([0.25, -0.06, 0])
+                    if self.centered_tag == 1:
+                       current_pos += np.array([-0.1, -0.12, 0])
+                    self.pose = calcIK(current_pos, current_quat)
 
-                #if current_pos[2] > 0.25:
-                #    self.random_flag = True
-                #    self.state = STATES.NONE
-
-                current_pos = (current_pos[0], current_pos[1], -0.1)
-                self.pose = calcIK(current_pos, np.array([1, 0, -1, 0]))
-                #self.pose = calcIK(current_pos, current_quat)
-
-                #if current_pos[2] < 0 and self.random_flag:
-                #    self.random_flag = False
-                #self.inc += 0.005
-                #if len(tag_centers) > 0:
-                #    self.inc = 0
+                elif time.time() - self.last_time >= 0.5:
+                    self.last_time = None
+                    self.state = STATES.GRAB
 
 
+        elif self.state == STATES.GRAB:
+            if current_pos[2] > 0.25:
+                self.inc = 0
+                self.state = STATES.NONE
+
+            current_pos += np.array([0, 0, self.inc - 0.1])
+            self.pose = calcIK(current_pos, current_quat)
+            self.inc += 0.005
 
 
         # EXAMPLE USAGE OF INVERSE KINEMATICS SOLVER
