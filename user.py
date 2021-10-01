@@ -219,6 +219,12 @@ class User:
 
             current_pos += np.array([0, 0, self.inc - 0.1])
             self.pose = calcIK(current_pos, current_quat)
+            if self.inc > 0.1:
+                self.pose['bravo_axis_a'] = 0
+                self.pose['bravo_axis_b'] = 0
+            else:
+                self.pose['bravo_axis_a'] = math.pi
+                self.pose['bravo_axis_b'] = math.pi
             self.inc += 0.005
 
 
