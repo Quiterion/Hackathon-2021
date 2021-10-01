@@ -160,7 +160,7 @@ class User:
             # Zoom out if centered
             tagX, tagY = tag_centers[0]
             if (tagX > 300 and tagX < 340) and (tagY > 220 and tagY < 260):
-                current_pos = (current_pos[0], current_pos[1], current_pos[2] + 0.1)
+                current_pos = (current_pos[0], current_pos[1] - 0.16, current_pos[2] + 0.1)
                 self.pose = calcIK(current_pos, current_quat)
             else:
                 # Center the April Tag
